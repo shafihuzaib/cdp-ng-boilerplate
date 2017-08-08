@@ -27,7 +27,7 @@ class FakeConfig {
  * TODO: Include tests for ErrorResponses
  */
 
-describe("API Service Class Tests", ()=>{
+describe("API Service: Unit", ()=>{
     beforeEach(()=>{
         TestBed.configureTestingModule({
             imports: [HttpModule],
@@ -52,7 +52,6 @@ describe("API Service Class Tests", ()=>{
         api.setBaseUri(uri);
 
         expect(api.baseUrl).toEqual(uri);
-
     })));
 
     it("should manipulate defaultHeaders", fakeAsync(inject([Api], (api:Api)=>{
@@ -161,7 +160,26 @@ describe("API Service Class Tests", ()=>{
             expect(res).toEqual(mockResponse);
         });
         
-    })))
+    })));
+
+    it("should store & load tokens from/to localStorage", ()=>{
+        let api = TestBed.get(Api);
+        let authToken = "some_random_authorization7bearer0token";
+        let tqlToken = "some_random_tql_access_token";
+
+        api.storeAuthToken(authToken);
+        api.storeTqlToken(tqlToken);
+
+        expect(localStorage.getItem('AUTH_TOKEN')).toEqual(authToken);
+        expect(localStorage.getItem('TQL_TOKEN')).toEqual(tqlToken);
+
+        api.loadTokens();
+
+        expect(api.defaultHeaders['Authorization']).toEqual("Bearer " + authToken);
+        expect(api.defaultHeaders['token']).toEqual(tqlToken);
+        
+    });
+
 
 });
 

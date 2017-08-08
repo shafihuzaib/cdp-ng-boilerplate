@@ -7,10 +7,11 @@
 
 import { Injectable } from '@angular/core';
 import { Headers, Http, RequestOptions, URLSearchParams } from '@angular/http';
-import { Observable } from 'rxjs/Observable';
+import { Observable, ReplaySubject } from 'rxjs';
 import 'rxjs/Rx';
 
 import { Config } from '../config/config-service';
+import { AuthService } from "../auth/auth-service";
 
 @Injectable()
 export class Api {
@@ -25,13 +26,17 @@ export class Api {
      * @param config
      */
     constructor(private http: Http, private config: Config) {
-        let accept = 'application/';
+        let accept = '*/' + "*";
 
-        accept += this.config.getEnv('API_STANDARDS_TREE') + '.';
-        accept += this.config.getEnv('API_SUBTYPE') + '.';
-        accept += this.config.getEnv('API_VERSION') + '+json';
+        // accept += this.config.getEnv('API_STANDARDS_TREE') + '.';
+        // accept += this.config.getEnv('API_SUBTYPE') + '.';
+        // accept += this.config.getEnv('API_VERSION') + '+json';
 
         this.apiAcceptHeader = {'Accept': accept};
+
+        //Retrieve tokens from storage (if any) & load them to defaultHeaders
+
+        this.loadTokens();
 
         this.baseUrl = this.config.get('api.baseUrl');
     }
@@ -113,13 +118,18 @@ export class Api {
      * @param url
      * @param data
      * @param options
+     * @param contentType
      * @returns {Observable<R>}
      */
-    post(url: string, data: any = {}, options: any = {}) {
+    post(url: string, data: any = {}, options: any = {}, contentType: string = 'application/json') {
         options = this.prepareApiRequest(options);
-        options.headers.append('Content-Type', 'application/json');
+        options.headers.append('Content-Type', contentType);
 
-        if (data.constructor === Object) {
+        if (data.constructor === Object && contentType == 'application/x-www-form-urlencoded') {
+            data = this.serialize(data, '', false);
+            console.log(data);
+        }
+        else{
             data = JSON.stringify(data);
         }
 
@@ -216,7 +226,7 @@ export class Api {
     private extractData(response: any): any {
         let body = response.json();
 
-        // CDP has no definite format for what the API would return, hence 
+        // CDP doesn't have a consistent API return format, hence 
         // it is preferable to just return the body object
         return body;
     }
@@ -252,8 +262,9 @@ export class Api {
     }
 
     /**
-     * Prepare request object for use with Lumen Dingo Api.
-     *
+     * Prepare request object for use.
+     * options[eheaders] = {} : Extra Headers to be appended
+     * 
      * @param options
      * @returns {RequestOptions}
      */
@@ -261,7 +272,8 @@ export class Api {
         let headers = Object.assign(
             this.apiAcceptHeader,
             this.defaultHeaders,
-            (options && options.headers) || {}
+            (options && options.headers) || {},
+            (options && options.eheaders)? options.eheaders : {}
         );
 
         if (!options || options.constructor !== RequestOptions) {
@@ -280,7 +292,7 @@ export class Api {
      * @param prefix
      * @returns {URLSearchParams}
      */
-    private serialize(obj: Object, prefix: string = ''): URLSearchParams {
+    private serialize(obj: Object, prefix: string = '', uriEncode = true): URLSearchParams {
         let str = [];
 
         for (let p in obj) {
@@ -289,11 +301,75 @@ export class Api {
 
                 str.push(typeof value === 'object'
                     ? this.serialize(value, _prefix)
-                    : encodeURIComponent(_prefix) + '=' + encodeURIComponent(value)
+                    : (uriEncode)? encodeURIComponent(_prefix) + '=' + encodeURIComponent(value) : _prefix + '=' + value
                 );
             }
         }
 
         return new URLSearchParams(str.join('&'));
     }
+
+    /**
+     * Load tokens into defaultHeaders array from localStorage
+     */
+    loadTokens(){
+        let authToken = localStorage.getItem('AUTH_TOKEN');
+        let tqlToken =  localStorage.getItem('TQL_TOKEN');
+
+        if(authToken){
+            this.defaultHeaders['Authorization'] = "Bearer " + authToken;
+        }
+            
+        if(tqlToken){
+            this.defaultHeaders['token'] = tqlToken;
+        }
+        
+    }
+
+    /**
+     * Store Authorization token & it's expiry (in ms) to localStorage
+     * @param token 
+     */
+    storeAuthToken(token, expiry, refresh_token){
+        /**
+         * Storing expiry as a date (in ms) makes it possible to compare
+         * the dates right-away, without any further conversion
+         */
+        localStorage.setItem('AUTH_TOKEN', token);
+        let date = new Date();
+        date.setSeconds(expiry);
+        localStorage.setItem('AUTH_TOKEN_EXPIRY', date.valueOf().toString());
+        localStorage.setItem("AUTH_REFRESH_TOKEN", refresh_token);
+        //Load the updated tokens
+        this.loadTokens();
+    }
+
+    /**
+     * Store TQL Access Token to localStorage
+     * @param token 
+     */
+    storeTqlToken(token, expiry){
+        localStorage.setItem('TQL_TOKEN', token);
+        let date = new Date();
+        date.setSeconds(expiry);
+        localStorage.setItem('TQL_TOKEN_EXPIRY', date.valueOf().toString());
+        //Load the updated tokens
+        this.loadTokens();
+    }
+
+    /**
+     * Store / Get Refresh Token to / from localStorage
+     * @param token 
+     */
+    public set authRefreshToken(token){
+        localStorage.setItem("AUTH_REFRESH_TOKEN", token);
+    }
+
+    public get authRefreshToken(){
+        return localStorage.getItem("AUTH_REFRESH_TOKEN");
+    } 
+
+   
+
+    
 }
