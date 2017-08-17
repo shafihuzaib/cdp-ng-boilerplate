@@ -80,7 +80,13 @@ export class AuthService{
             }
         };
 
-        return this.api.post(CONFIG.api.engineUrl + 'devices/activateuser', query, options);
+        return this.api.post(CONFIG.api.engineUrl + 'activateuser', query, options).do((res)=>{
+            if(res.token){
+                //save TQL Token
+                this.api.storeTqlToken(res.token, res.sessionExpiry);
+            }
+            
+        }); 
     }
 
     
@@ -114,11 +120,12 @@ export class AuthService{
                 //refreshed
                 this.postAuthSuccess(res);
 
-                if(tqlCheck &&  localStorage.getItem("TQL_TOKEN_EXPIRY") &&
-                        parseInt(localStorage.getItem("TQL_TOKEN_EXPIRY")) < (new Date()).valueOf()
+                if(tqlCheck &&  ( !localStorage.getItem("TQL_TOKEN_EXPIRY") ||
+                        parseInt(localStorage.getItem("TQL_TOKEN_EXPIRY")) < (new Date()).valueOf() )
                    ){
                     
                     this.activateUser().subscribe(res => {
+                       
                         //TQL token subscribed 
                         returnObservable = func();
                     })
@@ -133,14 +140,16 @@ export class AuthService{
             //auth not expired
 
             //check if tql token has expired
-            if(tqlCheck &&  localStorage.getItem("TQL_TOKEN_EXPIRY") &&
-                        parseInt(localStorage.getItem("TQL_TOKEN_EXPIRY")) < (new Date()).valueOf()
+            if(tqlCheck &&  ( !localStorage.getItem("TQL_TOKEN_EXPIRY") ||
+                        parseInt(localStorage.getItem("TQL_TOKEN_EXPIRY")) < (new Date()).valueOf() )
                    ){
-                    
+                    console.log("To start activateUser..");
                     this.activateUser().subscribe(res => {
+                         console.log("Completed activateUser", res, func, func());
                         //TQL token subscribed 
                         returnObservable = func();
-                    })
+                        console.log('test-', returnObservable);
+                    });
                 }
                 else{
                     // Probably not a TQL request or none of the tokens expired
@@ -164,7 +173,7 @@ export class AuthService{
             //save Authorization Header
             //console.error(res);
             if(response.access_token){
-                this.api.storeAuthToken(response.access_token, response.expiry, response.refresh_token);
+                this.api.storeAuthToken(response.access_token, response.expires_in, response.refresh_token);
                 
             }
             
